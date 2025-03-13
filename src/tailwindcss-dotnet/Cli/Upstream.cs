@@ -1,21 +1,42 @@
 ﻿using System.Runtime.InteropServices;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace Tailwindcss.DotNetTool.Cli;
 
 public class Upstream
 {
-    public static string Version => "v4.0.0";
+    private static readonly HttpClient httpClient = new HttpClient();
+
+    public static async Task<string> GetLatestReleaseVersionAsync()
+    {
+        var fallbackVersion = "v4.0.0";
+        try
+        {
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("dotnet-tailwindcss");
+            var response = await httpClient.GetAsync("https://api.github.com/repos/tailwindlabs/tailwindcss/releases/latest");
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(json);
+            var version = document.RootElement.GetProperty("tag_name").GetString();
+
+            return version ?? fallbackVersion;
+        }
+       
+        catch
+        {
+            return fallbackVersion;
+        }
+    }
+    public static string Version{ get; } = GetLatestReleaseVersionAsync().GetAwaiter().GetResult();
 
     public static string? GetNativeExecutableName()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            return RuntimeInformation.ProcessArchitecture switch
-            {
-                Architecture.Arm64 => "tailwindcss-windows-arm64.exe",
-                Architecture.X64 => "tailwindcss-windows-x64.exe",
-                _ => null
-            };
+            return "tailwindcss-windows-x64.exe";
         }
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
